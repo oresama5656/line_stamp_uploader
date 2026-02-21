@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+error_*.png
+.gemini/
+.agent/
+.system_generated/
+# stamps_data.csv は個人情報を含む可能性があるため、無視するか、テンプレートのみを管理することを推奨します。
+# テンプレートを stamps_data_template.csv として別出しするのも良いですね。
