@@ -208,7 +208,17 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
 # ============================================================
 def main():
     debug = "--debug" in sys.argv
-    csv_path = os.path.join(os.path.dirname(__file__), "stamps_data.csv")
+    
+    # コマンドライン引数からCSVパスを取得（引数があればそれを使用、なければデフォルト）
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
+        csv_path = sys.argv[1]
+    else:
+        csv_path = os.path.join(os.path.dirname(__file__), "stamps_data.csv")
+
+    if not os.path.isabs(csv_path):
+        csv_path = os.path.abspath(csv_path)
+
+    print(f"DEBUG: 使用するCSV = {csv_path}")
 
     # データ読み込み（done=1 の行は自動スキップ）
     stamps, fieldnames = load_stamps_data(csv_path)
