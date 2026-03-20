@@ -246,7 +246,7 @@ def main():
         # ブラウザ起動 (常にGUI表示 & ゆっくり動作)
         browser = p.chromium.launch(
             headless=False,
-            slow_mo=1000,  # 各操作の間に1秒待機（目視確認用）
+            slow_mo=200,  # 各操作の間に1秒待機（目視確認用）
         )
         page = browser.new_page()
 
