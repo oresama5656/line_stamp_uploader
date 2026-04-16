@@ -16,6 +16,7 @@ main.py - LINE Creators Market スタンプ登録自動化ツール
 import csv
 import sys
 import os
+import zipfile
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # --- セレクタ・設定の読み込み ---
@@ -26,7 +27,12 @@ from config import (
     COPYRIGHT_SELECTOR,
     AI_GENERATED_SELECTOR,
     TASTE_CATEGORY_SELECTOR, CHARACTER_CATEGORY_SELECTOR,
-    SAVE_BUTTON_SELECTOR,
+    SAVE_BUTTON_SELECTOR, SAVE_CONFIRM_MODAL_OK_SELECTOR,
+    STAMP_IMAGES_TAB_SELECTOR, EDIT_IMAGES_BUTTON_SELECTOR, STAMP_COUNT_SELECT_SELECTOR,
+    CONFIRM_COUNT_MODAL_OK_SELECTOR,
+    ZIP_UPLOAD_BUTTON_SELECTOR, ZIP_FILE_INPUT_SELECTOR,
+    BACK_TO_MANAGE_BUTTON_SELECTOR, REQUEST_APPROVAL_BUTTON_SELECTOR,
+    CONSENT_CHECKBOX_SELECTOR, FINAL_SUBMIT_BUTTON_SELECTOR,
     DEFAULT_COPYRIGHT, DEFAULT_AI_FLAG,
     VALID_TASTE_CATEGORIES, VALID_CHARACTER_CATEGORIES,
 )
@@ -58,6 +64,11 @@ def load_stamps_data(csv_path: str) -> tuple[list[dict], list[str]]:
 
     # done=1 の行をスキップ
     todo = [row for row in all_data if row.get("done", "").strip() != "1"]
+    
+    # id列の確認（ZIPアップロードに必須）
+    if todo and "id" not in fieldnames:
+        print("警告: CSVに 'id' 列がありません。ZIPアップロードをスキップします。")
+    
     done_count = len(all_data) - len(todo)
 
     print(f"✅ 全 {len(all_data)} 件中、{done_count} 件は処理済み。残り {len(todo)} 件を処理します。")
@@ -132,7 +143,27 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
     1件分のスタンプ情報をフォームに入力する。
     memo.md の手順 1〜10 に対応。
     """
+    # ダイアログハンドラの設定 (保存時の最終確認など)
+    def handle_initial_dialog(dialog):
+        print(f"  💬 ダイアログ出現: {dialog.message}")
+        dialog.accept()
+        print("  ✅ ダイアログを承認しました。")
 
+    page.on("dialog", handle_initial_dialog)
+
+    # --- ZIPパスの解決 ---
+    # StampHubの標準パスを想定
+    id_val = stamp.get("id", "").strip()
+    zip_path = ""
+    if id_val:
+        # StampHubのディレクトリ（config経由が理想だが、一旦固定または相対で解決）
+        # 文脈上、d:\StampHub\assets\export\ready\[id].zip
+        candidate = f"d:\\StampHub\\assets\\export\\ready\\{id_val}.zip"
+        if os.path.exists(candidate):
+            zip_path = candidate
+            # print(f"  📦 連携: ZIPファイルを発見しました: {zip_path}") 
+        else:
+            print(f"  ⚠️ 連携: ZIPファイルが見つかりません: {candidate}")
     # --- 手順1: 英語タイトルを入力 ---
     print("  [1/10] 英語タイトルを入力中...")
     page.fill(TITLE_EN_SELECTOR, stamp["title_en"])
@@ -186,21 +217,159 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
     else:
         print("  [9/10] キャラクターカテゴリ: スキップ（未指定）")
 
-    # [将来の拡張用：ZIP登録処理]
-    # zip_path = stamp.get("zip_path", "")
-    # if zip_path:
-    #     upload_sticker_images(page, zip_path)
-
-    if debug:
-        input("  [DEBUG] 保存ボタンを押す前の最終確認。Enter で保存を実行...")
-
     # --- 手順10: 保存ボタンをクリック ---
-    print("  [10/10] 保存ボタンをクリック中...")
+    print("  [Step 10/10] 保存ボタンをクリック中...")
     page.click(SAVE_BUTTON_SELECTOR)
 
+    # 保存確定モーダルの出現を待って確定 (キーボード操作: Tab x3 + Enter)
+    print("  💬 保存確定モーダルを待機中（キーボード操作で承認します）...")
+    page.wait_for_timeout(2000) # モーダル表示待ち
+    try:
+        # 要素の有無に関わらず、フォーカスがモーダルにあると信じてキー入力を送信
+        for i in range(3):
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(200)
+        page.keyboard.press("Enter")
+        print("  ✅ キーボード操作（Tab x3 + Enter）を送信しました。")
+    except Exception as e:
+        print(f"  ⚠️ キーボード操作中にエラーが発生しました: {e}")
+
     # ページ遷移を待機
+    page.wait_for_timeout(2000)
     page.wait_for_load_state("networkidle")
-    print("  ✅ 保存完了！")
+    print("  ✅ メタデータ保存完了！")
+    
+    # ハンドラの解除
+    page.remove_listener("dialog", handle_initial_dialog)
+    
+    return zip_path
+
+
+def request_approval_flow(page, zip_path: str, debug: bool = False):
+    """
+    保存完了後の申請フロー 10ステップを実行する。
+    """
+    print("\n" + "-" * 30)
+    print("🚀 申請（リクエスト）フローを開始します")
+    print("-" * 30)
+
+    # ダイアログハンドラの設定 (個数変更時のOKボタン)
+    def handle_dialog(dialog):
+        print(f"  💬 ダイアログ出現: {dialog.message}")
+        dialog.accept()
+        print("  ✅ ダイアログを承認しました。")
+
+    page.on("dialog", handle_dialog)
+
+    # ZIP内のスタンプ個数を判定
+    stamp_count = 40  # デフォルト
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            # main.png, tab.png, meta 等を除いた純粋な数字名のファイルをカウント
+            all_files = z.namelist()
+            # 拡張子を除いたファイル名が数字のものをカウント
+            stamps = [f for f in all_files if f.lower().endswith(('.png', '.jpg')) 
+                     and os.path.basename(f).split('.')[0].isdigit()]
+            if stamps:
+                stamp_count = len(stamps)
+                print(f"  📊 ZIP内のスタンプ数を検知しました: {stamp_count}個")
+    except Exception as e:
+        print(f"  ⚠️ ZIP解析に失敗しました（デフォルトの40個を使用します）: {e}")
+
+    steps = [
+        ("1. スタンプ画像タブ", STAMP_IMAGES_TAB_SELECTOR, "click"),
+        ("2. 編集ボタン", EDIT_IMAGES_BUTTON_SELECTOR, "click"),
+        ("3. スタンプ個数選択", STAMP_COUNT_SELECT_SELECTOR, f"select_{stamp_count}"),
+        ("4. 個数変更の確定", CONFIRM_COUNT_MODAL_OK_SELECTOR, "click"),
+        # 5. ZIPアップロードボタン (統合済み)
+        ("5. ZIPアップロードボタン", ZIP_UPLOAD_BUTTON_SELECTOR, "click"),
+        # 6. はスキップ（5で完了）
+        ("7. 戻るボタン", BACK_TO_MANAGE_BUTTON_SELECTOR, "click"),
+        ("8. リクエストボタン", REQUEST_APPROVAL_BUTTON_SELECTOR, "click"),
+        ("9. 同意チェックボックス", CONSENT_CHECKBOX_SELECTOR, "click"),
+        ("10. 最終確定ボタン", FINAL_SUBMIT_BUTTON_SELECTOR, "click"),
+    ]
+
+    for name, selector, action in steps:
+        print(f"  ▶️ {name} 実行中...")
+        
+        # セレクタがない（未設定）または要素が見つからない場合の対話的処理
+        if not selector or not is_element_present(page, selector):
+            print(f"\n  ⚠️ 【要確認】{name} の要素が見つかりません。")
+            print(f"     1. ブラウザで {name} を手動で操作してください。")
+            print(f"     2. (推奨) 開発者ツールでセレクタを取得し、config.py を更新してください。")
+            input(f"     [準備ができたら Enter を押してください] ")
+            # 手動操作後はスキップするか、再度試行する
+            continue
+
+        try:
+            # --- 特別対応: 1. スタンプ画像タブ ---
+            if name == "1. スタンプ画像タブ":
+                # 要素の取得
+                target_element = page.locator(selector).first
+                target_element.wait_for(state="visible", timeout=10000)
+
+                # 既に選択済みならスキップ
+                class_attr = target_element.get_attribute("class") or ""
+                if "selected" in class_attr:
+                    print(f"  ⏭️ {name} は既に選択されているためスキップします。")
+                    page.wait_for_timeout(500)
+                    continue
+
+                # 有効（Enabled）になるまで待機
+                print(f"  ⏳ {name} が有効になるのを待機中...")
+                for _ in range(20): # 最大10秒程度
+                    if target_element.is_enabled():
+                        break
+                    page.wait_for_timeout(500)
+
+            if action == "click":
+                # --- 特別対応: 5. ZIPアップロードボタン ---
+                if name == "5. ZIPアップロードボタン":
+                    print("  📂 ファイル選択イベントを待機中...")
+                    try:
+                        with page.expect_file_chooser(timeout=10000) as fc_info:
+                            page.click(selector)
+                        file_chooser = fc_info.value
+                        file_chooser.set_files(zip_path)
+                        print(f"  ✅ ZIPファイルをアップロードしました: {os.path.basename(zip_path)}")
+                        # 次のステップ（旧 6. ZIPファイル選択）は削除したためそのまま続行
+                        continue
+                    except Exception as e:
+                        print(f"  ⚠️ ファイルアップロード中にエラーが発生しました（手動操作に切り替えます）: {e}")
+                
+                page.click(selector)
+            elif action.startswith("select_"):
+                # 動的な個数を選択
+                target_count = action.split("_")[1]
+                print(f"  🔢 個数を選択中: {target_count}個")
+                page.select_option(selector, value=target_count)
+            elif action == "upload":
+                page.set_input_files(selector, zip_path)
+            
+            # 各操作の後に少し待機
+            page.wait_for_timeout(1000)
+            
+            if debug:
+                input(f"  [DEBUG] {name} 完了。次へ進むには Enter...")
+
+        except Exception as e:
+            print(f"  ❌ {name} でエラーが発生しました: {e}")
+            input("  [手動で解決し、Enter で次へ進んでください] ")
+
+    # ダイアログハンドラの解除
+    page.remove_listener("dialog", handle_dialog)
+    print("\n✅ 全ての申請プロセスが終了しました。")
+
+
+def is_element_present(page, selector: str, timeout: int = 3000) -> bool:
+    """要素が存在するか確認するヘルパー関数"""
+    if not selector: return False
+    try:
+        page.wait_for_selector(selector, state="visible", timeout=timeout)
+        return True
+    except:
+        return False
 
 
 # ============================================================
@@ -257,9 +426,11 @@ def main():
         print("ブラウザが開きました。")
         print("以下の手順で進めてください：")
         print("  1. LINEアカウントでログインする")
-        print("  2. スタンプの新規登録画面まで移動する")
+        print("  2. クリエイターズマーケットの「アイテム管理」から対象のスタンプセットを選択")
+        print("  3. または「新規登録」ボタンを押して登録画面を表示する")
         print("-" * 50)
-        input("\n準備ができたら Enter を押してください...")
+        print("\n💡 ヒント: 初回のZIPアップロード時、Antigravity（AI）がセレクタを確認します。")
+        input("準備ができたら Enter を押してください...")
 
         completed = 0
 
@@ -276,7 +447,10 @@ def main():
                 input("  準備ができたら Enter を押してください...")
 
             try:
-                fill_stamp_form(page, stamp, debug=debug)
+                zip_path = fill_stamp_form(page, stamp, debug=debug)
+                
+                # 申請フローの実行
+                request_approval_flow(page, zip_path, debug=debug)
 
                 # 保存成功 → CSVのdone列を1に更新
                 mark_done(csv_path, fieldnames, stamp)
