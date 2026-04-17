@@ -68,9 +68,15 @@
 #layout > main > form > section:nth-child(3) > div:nth-child(1) > div.MdCMN09FormTbl > table > tbody > tr:nth-child(5) > td > div:nth-child(1) > span > span > select:
 
 ```
+##追加。販売開始設定：自動で販売を開始
+csvのauto_sellに1が入力されていたらこれを押してほしい。
+#layout > main > form > section:nth-child(3) > div:nth-child(1) > div.MdCMN09FormTbl > table > tbody > tr:nth-child(13) > td > div:nth-child(2) > label > span.mdInputRadio > input[type=radio]
+
+
 
 ## 10.「保存」ボタン
 ```
 #layout > main > form > div.MdCMN15Submit > span.MdBtn01.mdBtn01Cr01 > label
 
 ```
+

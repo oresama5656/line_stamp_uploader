@@ -49,6 +49,9 @@ FINAL_SUBMIT_BUTTON_SELECTOR = '#layout > main > div > div:nth-child(1) > div.cm
 NEW_REG_SIDEBAR_SELECTOR = '#layout > aside > div.button-container > a' # 左側フレームの新規登録
 NEW_STAMP_BTN_SELECTOR = '#layout > main > div > div.MdCMN27BtnWrap > a:nth-child(1)' # スタンプボタン
 
+# --- 販売設定 ---
+AUTO_SELL_RADIO_SELECTOR = '#layout > main > form > section:nth-child(3) > div:nth-child(1) > div.MdCMN09FormTbl > table > tbody > tr:nth-child(13) > td > div:nth-child(2) > label > span.mdInputRadio > input[type=radio]'
+
 
 # --- デフォルト値 ---
 DEFAULT_COPYRIGHT = "©ryo"

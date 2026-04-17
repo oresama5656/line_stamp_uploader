@@ -34,6 +34,7 @@ from config import (
     BACK_TO_MANAGE_BUTTON_SELECTOR, REQUEST_APPROVAL_BUTTON_SELECTOR,
     CONSENT_CHECKBOX_SELECTOR, FINAL_SUBMIT_BUTTON_SELECTOR,
     NEW_REG_SIDEBAR_SELECTOR, NEW_STAMP_BTN_SELECTOR,
+    AUTO_SELL_RADIO_SELECTOR,
     DEFAULT_COPYRIGHT, DEFAULT_AI_FLAG,
     VALID_TASTE_CATEGORIES, VALID_CHARACTER_CATEGORIES,
 )
@@ -254,6 +255,14 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
         page.select_option(CHARACTER_CATEGORY_SELECTOR, label=character)
     else:
         print("  [9/10] キャラクターカテゴリ: スキップ（未指定）")
+
+    # --- 販売開始設定の処理 ---
+    auto_sell = stamp.get("auto_sell", "").strip()
+    if auto_sell == "1":
+        print("  [追加] 販売設定: 「自動で販売を開始」を選択中...")
+        page.click(AUTO_SELL_RADIO_SELECTOR)
+    else:
+        print("  [追加] 販売設定: デフォルト（手動開始）")
 
     # --- 手順10: 保存ボタンをクリック ---
     print("  [Step 10/10] 保存ボタンをクリック中...")
