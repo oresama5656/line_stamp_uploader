@@ -33,6 +33,7 @@ from config import (
     ZIP_UPLOAD_BUTTON_SELECTOR, ZIP_FILE_INPUT_SELECTOR,
     BACK_TO_MANAGE_BUTTON_SELECTOR, REQUEST_APPROVAL_BUTTON_SELECTOR,
     CONSENT_CHECKBOX_SELECTOR, FINAL_SUBMIT_BUTTON_SELECTOR,
+    NEW_REG_SIDEBAR_SELECTOR, NEW_STAMP_BTN_SELECTOR,
     DEFAULT_COPYRIGHT, DEFAULT_AI_FLAG,
     VALID_TASTE_CATEGORIES, VALID_CHARACTER_CATEGORIES,
 )
@@ -136,6 +137,43 @@ def mark_done(csv_path: str, fieldnames: list[str], stamp: dict):
 
 
 # ============================================================
+# 1.5 画面遷移（自動化用）
+# ============================================================
+def navigate_to_new_stamp_form(page):
+    """
+    左側メニューの「新規登録」→「スタンプ」をクリックして、
+    スタンプ編集画面へ移動する。
+    """
+    print("\n🚀 [自動遷移] スタンプ新規登録画面へ移動します...")
+    
+    try:
+        # 左側フレームの「新規登録」をクリック
+        print("  ▶️ 左メニューの「新規登録」をクリック中...")
+        page.wait_for_selector(NEW_REG_SIDEBAR_SELECTOR, state="visible", timeout=10000)
+        page.click(NEW_REG_SIDEBAR_SELECTOR)
+        
+        # 画面が切り替わるのを少し待つ
+        page.wait_for_load_state("networkidle")
+        
+        # 右側フレームの「スタンプ」ボタンをクリック
+        print("  ▶️ 右メイン画面の「スタンプ」ボタンをクリック中...")
+        page.wait_for_selector(NEW_STAMP_BTN_SELECTOR, state="visible", timeout=10000)
+        page.click(NEW_STAMP_BTN_SELECTOR)
+        
+        # 編集フォーム（英語タイトル入力欄）が出るまで待機
+        page.wait_for_selector(TITLE_EN_SELECTOR, state="visible", timeout=15000)
+        print("  ✅ 準備完了！")
+        return True
+        
+    except Exception as e:
+        print(f"  ❌ 遷移中にエラーが発生しました: {e}")
+        print("  💡 手動でスタンプ登録画面を開いてください。")
+        input("  [準備ができたら Enter を押してください] ")
+        return False
+
+
+
+# ============================================================
 # 2. メタデータ入力（1件分のフォーム操作）
 # ============================================================
 def fill_stamp_form(page, stamp: dict, debug: bool = False):
@@ -152,13 +190,13 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
     page.on("dialog", handle_initial_dialog)
 
     # --- ZIPパスの解決 ---
-    # StampHubの標準パスを想定
+    # ZIPファイルが格納されているフォルダを指定
+    ZIP_DIR_BASE = "d:\\StampHub\\assets\\export\\ready"
+    
     id_val = stamp.get("id", "").strip()
     zip_path = ""
     if id_val:
-        # StampHubのディレクトリ（config経由が理想だが、一旦固定または相対で解決）
-        # 文脈上、d:\StampHub\assets\export\ready\[id].zip
-        candidate = f"d:\\StampHub\\assets\\export\\ready\\{id_val}.zip"
+        candidate = os.path.join(ZIP_DIR_BASE, f"{id_val}.zip")
         if os.path.exists(candidate):
             zip_path = candidate
             # print(f"  📦 連携: ZIPファイルを発見しました: {zip_path}") 
@@ -223,7 +261,7 @@ def fill_stamp_form(page, stamp: dict, debug: bool = False):
 
     # 保存確定モーダルの出現を待って確定 (キーボード操作: Tab x3 + Enter)
     print("  💬 保存確定モーダルを待機中（キーボード操作で承認します）...")
-    page.wait_for_timeout(2000) # モーダル表示待ち
+    page.wait_for_timeout(500) # モーダル表示待ち
     try:
         # 要素の有無に関わらず、フォーカスがモーダルにあると信じてキー入力を送信
         for i in range(3):
@@ -432,6 +470,9 @@ def main():
         print("\n💡 ヒント: 初回のZIPアップロード時、Antigravity（AI）がセレクタを確認します。")
         input("準備ができたら Enter を押してください...")
 
+        # 初回の自動遷移
+        navigate_to_new_stamp_form(page)
+
         completed = 0
 
         # --- 登録ループ ---
@@ -442,9 +483,8 @@ def main():
             print(f"{'=' * 50}")
 
             if i > 0:
-                # 2件目以降：ユーザーに新規登録画面を開いてもらう
-                print("\n  次のスタンプの新規登録画面を開いてください。")
-                input("  準備ができたら Enter を押してください...")
+                # 2件目以降：自動で新規登録画面を開く
+                navigate_to_new_stamp_form(page)
 
             try:
                 zip_path = fill_stamp_form(page, stamp, debug=debug)

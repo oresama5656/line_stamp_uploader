@@ -45,6 +45,11 @@ REQUEST_APPROVAL_BUTTON_SELECTOR = '#layout > main > div > div:nth-child(1) > di
 CONSENT_CHECKBOX_SELECTOR = '#layout > main > div > div:nth-child(1) > div.cm-product-heading > div.cm-modal.cm-modal-dialog-centered > div > div.cm-confirm-content > div > div > div:nth-child(3) > label > input' # (9) 同意チェックボックス (1つ目)
 FINAL_SUBMIT_BUTTON_SELECTOR = '#layout > main > div > div:nth-child(1) > div.cm-product-heading > div.cm-modal.cm-modal-dialog-centered > div > div.cm-confirm-panel > button.plain-btn-reset.cm-confirm-button.cm-confirm-button-primary > span' # (10) 最終確定ボタン
 
+# --- 新規登録への遷移用 ---
+NEW_REG_SIDEBAR_SELECTOR = '#layout > aside > div.button-container > a' # 左側フレームの新規登録
+NEW_STAMP_BTN_SELECTOR = '#layout > main > div > div.MdCMN27BtnWrap > a:nth-child(1)' # スタンプボタン
+
+
 # --- デフォルト値 ---
 DEFAULT_COPYRIGHT = "©ryo"
 DEFAULT_AI_FLAG = "true"
